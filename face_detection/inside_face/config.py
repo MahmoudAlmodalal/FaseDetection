@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-try:
-    from .domain import FaceTrackingSettings
-except ImportError:  # pragma: no cover - script execution fallback
-    from domain import FaceTrackingSettings
+from .domain import FaceTrackingSettings
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

@@ -4,18 +4,14 @@ import time
 
 import cv2
 
-try:
-    from .config import build_settings
-    from .infrastructure import (
-        FrameRenderer,
-        InsightFaceDetector,
-        NorfairFaceTracker,
-        OpenCVVideoSource,
-        SUPPORTED_IMAGE_SUFFIXES,
-    )
-except ImportError:  # pragma: no cover - script execution fallback
-    from config import build_settings
-    from infrastructure import FrameRenderer, InsightFaceDetector, NorfairFaceTracker, OpenCVVideoSource, SUPPORTED_IMAGE_SUFFIXES
+from .config import build_settings
+from .infrastructure import (
+    FrameRenderer,
+    InsightFaceDetector,
+    NorfairFaceTracker,
+    OpenCVVideoSource,
+    SUPPORTED_IMAGE_SUFFIXES,
+)
 
 
 class FaceDetectionApplication:

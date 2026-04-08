@@ -20,10 +20,7 @@ except ImportError as exc:  # pragma: no cover - depends on environment
         "norfair is required for the tracking pipeline. Install it before running this project."
     ) from exc
 
-try:
-    from .domain import FaceBox, FaceTrackingSettings
-except ImportError:  # pragma: no cover - script execution fallback
-    from domain import FaceBox, FaceTrackingSettings
+from .domain import FaceBox, FaceTrackingSettings
 
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
