@@ -1,44 +1,43 @@
-# Face Detection Workspace
+# inside_face Pipeline
 
-This workspace contains multiple face detection experiments. The most organized one is the cleaned InsightFace + Norfair pipeline in [insideFace/](insideFace).
+This directory contains the supported face-detection pipeline for the workspace. The package is `inside_face`, and it is the most structured part of the repository.
 
-## Clean architecture layout
+## Layout
 
-- [insideFace/domain.py](insideFace/domain.py) - data models and settings
-- [insideFace/config.py](insideFace/config.py) - path resolution and defaults
-- [insideFace/infrastructure.py](insideFace/infrastructure.py) - detector, tracker, video source, and rendering
-- [insideFace/application.py](insideFace/application.py) - orchestration layer
-- [insideFace/insideFace.py](insideFace/insideFace.py) - video entrypoint
-- [insideFace/inshightFaceP.py](insideFace/inshightFaceP.py) - image entrypoint
-- [insideFace/inshightFaceMosse.py](insideFace/inshightFaceMosse.py) - tighter tracking variant
+- `inside_face/domain.py`: shared data models and runtime settings
+- `inside_face/config.py`: project-relative defaults and path resolution
+- `inside_face/infrastructure.py`: detector, tracker, video source, and rendering utilities
+- `inside_face/application.py`: orchestration layer for image and video flows
+- `inside_face/cli.py`: subcommand CLI used by `python -m inside_face`
 
-## Requirements
+## Dependencies
 
-Install the Python packages used by the clean pipeline:
+Install the supported dependencies from the repository root:
 
-- opencv-python
-- insightface
-- norfair
-- numpy
+```bash
+python3 -m pip install -r ../requirements.txt
+```
 
 ## Run
 
-From the project root:
+From this directory:
 
-- Video tracking: `python insideFace/insideFace.py`
-- Video tracking with package mode: `python -m insideFace`
-- Image detection: `python insideFace/inshightFaceP.py --images /path/to/images`
+```bash
+python3 -m inside_face video --video video/v1.mp4
+python3 -m inside_face video --profile tight --video video/v1.mp4
+python3 -m inside_face images --images test_image
+```
 
-## Runtime notes
+Or from the repository root:
 
-- The app looks for a default video in [video/](video) and default images in [test_image/](test_image).
-- Use `--video` to point to a custom video file.
-- Use `--scale` to control resizing speed vs. accuracy.
-- Use `--distance` to tune tracker behavior.
+```bash
+cd face_detection
+python3 -m inside_face video --video video/v1.mp4
+```
 
-## Maintainability goals
+## Notes
 
-- keep entry files thin
-- keep settings in one place
-- use shared domain objects
-- avoid duplicating detector/tracker logic across scripts
+- The CLI uses subcommands instead of the older standalone entry scripts.
+- Default media resolution is taken from `video/` and `test_image/` when you do not pass custom paths.
+- `tight` is a preset for stricter tracker matching in video mode.
+- Large videos and model files are intentionally ignored by git in the workspace root.

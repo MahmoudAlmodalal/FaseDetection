@@ -1,47 +1,63 @@
-import cv2
-import numpy as np
-from norfair import Detection, Tracker, Video, draw_points
-from mtcnn import MTCNN
+from __future__ import annotations
 
-# Initialize the MTCNN face detector
-face_detector = MTCNN()
+import argparse
+from pathlib import Path
 
-# Norfair
-video = Video(input_path="/home/mahmoud/Desktop/face detection/face_detection/video/v8.mp4")
-cap = cv2.VideoCapture("C:/Users/p8036/Desktop/face detection/face_detection/video/v4.mp4")
-tracker = Tracker(distance_function="euclidean", distance_threshold=20)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_VIDEO = PROJECT_ROOT / "video" / "v8.mp4"
 
-for frame in video:
-    timer = cv2.getTickCount()
-    ret, f = cap.read()
 
-    # Detect faces using MTCNN
-    detections = []
-    faces = face_detector.detect_faces(frame)
-    for face in faces:
-        # Convert the face detections to Norfair Detection objects
-        detection = Detection(np.array([face['box'][0] + face['box'][2], face['box'][1] + face['box'][3] / 2]))
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Legacy MTCNN + Norfair video tracking demo.")
+    parser.add_argument("--video", default=str(DEFAULT_VIDEO), help="Path to the input video.")
+    parser.add_argument("--window-name", default="Tracked Objects", help="OpenCV window title.")
+    return parser
 
-        # Convert detections to a list of lists
-        detections.append(detection)
 
-    # Update the tracker with the face detections
-    tracked_objects = tracker.update(detections=detections)
+def main() -> None:
+    args = build_parser().parse_args()
 
-    # Show the original frame if it's not empty and has valid dimensions
-    if not f is None and f.shape[0] > 0 and f.shape[1] > 0:
-        cv2.imshow("Original Frame", f)
+    try:
+        global cv2
+        import cv2
+        import numpy as np
+        from mtcnn import MTCNN
+        from norfair import Detection, Tracker, draw_points
+    except ImportError as exc:
+        raise SystemExit("mtcnn and norfair are required for this experiment. Install them from requirements-experiments.txt.") from exc
 
-    # Draw the tracked objects on the frame
-    frame_with_tracks = draw_points(frame, tracked_objects)
-    fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer)
-    cv2.putText(frame, f"FPS: {int(fps)}", (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-    cv2.imshow("Tracked Objects", frame_with_tracks)
+    video_path = Path(args.video).expanduser()
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        raise SystemExit(f"Could not open video: {video_path}")
 
-    # Check for user input to exit
-    key = cv2.waitKey(1)
-    if key == 27:  # Press 'Esc' to exit
-        break
+    detector = MTCNN()
+    tracker = Tracker(distance_function="euclidean", distance_threshold=20)
 
-cap.release()
-cv2.destroyAllWindows()
+    try:
+        while True:
+            timer = cv2.getTickCount()
+            ok, frame = capture.read()
+            if not ok:
+                break
+
+            detections = []
+            for face in detector.detect_faces(frame):
+                x, y, w, h = face["box"]
+                detections.append(Detection(np.array([x + w / 2.0, y + h / 2.0])))
+
+            tracked_objects = tracker.update(detections=detections)
+            frame_with_tracks = draw_points(frame.copy(), tracked_objects)
+            fps = cv2.getTickFrequency() / max(cv2.getTickCount() - timer, 1)
+            cv2.putText(frame_with_tracks, f"FPS: {int(fps)}", (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.imshow(args.window_name, frame_with_tracks)
+
+            if cv2.waitKey(1) & 0xFF == 27:
+                break
+    finally:
+        capture.release()
+        cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()

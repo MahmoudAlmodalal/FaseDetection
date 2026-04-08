@@ -1,0 +1,13 @@
+-r requirements.txt
+
+matplotlib
+mtcnn
+deepface
+face-recognition
+dlib
+ultralytics
+torch
+filterpy
+scikit-image
+
+# Install Detectron2 from the official instructions for your platform if you want to run d.py.

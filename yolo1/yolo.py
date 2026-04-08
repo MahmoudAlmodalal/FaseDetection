@@ -1,37 +1,63 @@
-import cv2
-import torch
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
 
-# Load YOLOv5 model (you need to specify the model weights)
-weights_path = 'path/to/yolov5s.pt'  # Replace with the path to your YOLOv5 model weights
-model = torch.hub.load('ultralytics/yolov5:master', 'custom', path=weights_path)
+WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_VIDEO = WORKSPACE_ROOT / "face_detection" / "video" / "v4.mp4"
+DEFAULT_WEIGHTS = Path(__file__).resolve().with_name("yolov8n-face.pt")
 
-# Open the video stream or video file
-cap = cv2.VideoCapture("C:/Users/p8036/Desktop/face detection/face_detection/face-demographics-walking.mp4")
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Legacy YOLO face video demo.")
+    parser.add_argument("--video", default=str(DEFAULT_VIDEO), help="Path to the input video.")
+    parser.add_argument("--weights", default=str(DEFAULT_WEIGHTS), help="Path to the YOLO weights file.")
+    parser.add_argument("--window-name", default="Face Detection", help="OpenCV window title.")
+    return parser
 
-    # Perform face detection using YOLOv5
-    results = model(frame)  # Detect objects, including faces
 
-    # Filter results to keep only face detections (you may need to adjust labels)
-    faces = results.pred[results.pred[:, 5] == 0]
+def main() -> None:
+    args = build_parser().parse_args()
 
-    for face in faces:
-        x, y, w, h, confidence = face[:5].cpu().numpy()
+    try:
+        global cv2
+        import cv2
+        from ultralytics import YOLO
+    except ImportError as exc:
+        raise SystemExit("ultralytics is required for this experiment. Install it from requirements-experiments.txt.") from exc
 
-        # Draw bounding box around the face
-        x1, y1, x2, y2 = int(x - w / 2), int(y - h / 2), int(x + w / 2), int(y + h / 2)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    video_path = Path(args.video).expanduser()
+    weights_path = Path(args.weights).expanduser()
 
-    # Display the frame with bounding boxes
-    cv2.imshow('Face Detection', frame)
+    if not video_path.exists():
+        raise SystemExit(f"Video not found: {video_path}")
+    if not weights_path.exists():
+        raise SystemExit(f"Weights not found: {weights_path}")
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    model = YOLO(str(weights_path))
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        raise SystemExit(f"Could not open video: {video_path}")
 
-cap.release()
-cv2.destroyAllWindows()
+    try:
+        while True:
+            ok, frame = capture.read()
+            if not ok:
+                break
+
+            results = model(frame)
+            for result in results:
+                for box in result.boxes.cpu().numpy():
+                    x1, y1, x2, y2 = box.xyxy[0].astype(int)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            cv2.imshow(args.window_name, frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+    finally:
+        capture.release()
+        cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()

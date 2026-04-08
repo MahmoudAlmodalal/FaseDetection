@@ -1,75 +1,97 @@
-from ultralytics import YOLO
-import cv2
+from __future__ import annotations
+
+import argparse
 import math
+from pathlib import Path
 
-def drawBox(frame, bbox, face_id, i=0):
-    r = (0, 0, 255)
-    if i == 1:
-        r = (0, 255, 0)
-    cv2.rectangle(frame, bbox[:2], bbox[2:], (0, 255, 0), 2)  # draw boxes on img
-    cv2.putText(frame, f"Face ID: {face_id}", (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 2, r, 5)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_VIDEO = PROJECT_ROOT / "video" / "v1.mp4"
+DEFAULT_WEIGHTS = Path(__file__).resolve().with_name("yolov8n-face.pt")
 
-def calculate_distance(x1, y1, x2, y2):
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Legacy YOLOv8 heuristic ID tracking demo.")
+    parser.add_argument("--video", default=str(DEFAULT_VIDEO), help="Path to the input video.")
+    parser.add_argument("--weights", default=str(DEFAULT_WEIGHTS), help="Path to the YOLO weights file.")
+    parser.add_argument("--window-name", default="YOLOv8 Object Detection", help="OpenCV window title.")
+    return parser
+
+
+def calculate_distance(x1: float, y1: float, x2: float, y2: float) -> float:
     return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
-# Initialize YOLOv8 model
-model = YOLO("/home/mahmoud/Desktop/face detection/face_detection/face-detection-yolov8-main/yolov8n-face.pt")
-# Open a video capture
-cap = cv2.VideoCapture("/home/mahmoud/Desktop/face detection/face_detection/video/v1.mp4")
 
-# Initialize face ID counter
-face_id_counter = 1
-face_to_tracker_map = {}
+def draw_box(frame, bbox, face_id: int) -> None:
+    cv2.rectangle(frame, bbox[:2], bbox[2:], (0, 255, 0), 2)
+    cv2.putText(frame, f"Face ID: {face_id}", (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
 
-while True:
-    timer = cv2.getTickCount()
-    # Read a frame from the video
-    ret, frame = cap.read()
 
-    if not ret:
-        break
+def main() -> None:
+    args = build_parser().parse_args()
 
-    # Perform object detection using YOLOv8
-    results = model(frame)
+    try:
+        global cv2
+        import cv2
+        from ultralytics import YOLO
+    except ImportError as exc:
+        raise SystemExit("ultralytics is required for this experiment. Install it from requirements-experiments.txt.") from exc
 
-    # Draw bounding boxes and labels on the frame
-    for result in results:
-        boxes = result.boxes.cpu().numpy()  # get boxes on CPU in numpy
-        for box in boxes:  # iterate boxes
-            r = box.xyxy[0].astype(int)  # get corner points as int
+    video_path = Path(args.video).expanduser()
+    weights_path = Path(args.weights).expanduser()
 
-            # Check if the face is already tracked
-            matched_face_id = None
-            for face_id, bbox in face_to_tracker_map.items():
-                x1, y1, x2, y2 = bbox
-                center_x = r[0] + (r[2] - r[0]) / 2
-                center_y = r[1] + (r[3] - r[1]) / 2
+    if not video_path.exists():
+        raise SystemExit(f"Video not found: {video_path}")
+    if not weights_path.exists():
+        raise SystemExit(f"Weights not found: {weights_path}")
 
-                # Calculate distance between centers
-                distance = calculate_distance(center_x, center_y, (x1 + x2) / 2, (y1 + y2) / 2)
-                if distance < frame.shape[1] * frame.shape[0] * 0.000017:  # You can adjust this threshold as needed
-                    print(f"({x1}, {y1}) ({x2}, {y2}) - ({r[0]}, {r[1]}) ({r[2]}, {r[3]})")
-                    print(f"h{x2 - x1}, w{y2 - y1}, h{r[2] - r[0]}, w{r[3] - r[1]}")
-                    matched_face_id = face_id
-                    break
+    model = YOLO(str(weights_path))
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        raise SystemExit(f"Could not open video: {video_path}")
 
-            if matched_face_id is None:
-                # Assign a new face ID
-                matched_face_id = face_id_counter
-                face_id_counter += 1
+    face_id_counter = 1
+    face_to_tracker_map: dict[int, tuple[int, int, int, int]] = {}
 
-            face_to_tracker_map[matched_face_id] = (r[0], r[1], r[2], r[3])
-            drawBox(frame, r, matched_face_id)
-    
-    fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer)
+    try:
+        while True:
+            timer = cv2.getTickCount()
+            ok, frame = capture.read()
+            if not ok:
+                break
 
-    cv2.putText(frame, f"FPS: {int(fps)}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 5)
-    # Display the frame with detected objects using OpenCV
-    cv2.imshow("YOLOv8 Object Detection", cv2.resize(frame, (int(frame.shape[1] * 0.3), int(frame.shape[0] * 0.3)), interpolation=cv2.INTER_AREA))
+            for result in model(frame):
+                for box in result.boxes.cpu().numpy():
+                    bbox = tuple(box.xyxy[0].astype(int))
+                    matched_face_id = None
 
-    # Press 'q' to exit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-# Release the video capture and close any open windows
-cap.release()
-cv2.destroyAllWindows()
+                    for face_id, known_bbox in face_to_tracker_map.items():
+                        center_x = bbox[0] + (bbox[2] - bbox[0]) / 2
+                        center_y = bbox[1] + (bbox[3] - bbox[1]) / 2
+                        distance = calculate_distance(center_x, center_y, (known_bbox[0] + known_bbox[2]) / 2, (known_bbox[1] + known_bbox[3]) / 2)
+                        if distance < frame.shape[1] * frame.shape[0] * 0.000017:
+                            matched_face_id = face_id
+                            break
+
+                    if matched_face_id is None:
+                        matched_face_id = face_id_counter
+                        face_id_counter += 1
+
+                    face_to_tracker_map[matched_face_id] = bbox
+                    draw_box(frame, bbox, matched_face_id)
+
+            fps = cv2.getTickFrequency() / max(cv2.getTickCount() - timer, 1)
+            cv2.putText(frame, f"FPS: {int(fps)}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cv2.imshow(
+                args.window_name,
+                cv2.resize(frame, (int(frame.shape[1] * 0.3), int(frame.shape[0] * 0.3)), interpolation=cv2.INTER_AREA),
+            )
+
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+    finally:
+        capture.release()
+        cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()

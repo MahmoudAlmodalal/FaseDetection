@@ -1,5 +1,3 @@
 """Supported InsightFace face detection and tracking package."""
 
-from .application import FaceDetectionApplication
-
-__all__ = ["FaceDetectionApplication"]
+__all__: list[str] = []

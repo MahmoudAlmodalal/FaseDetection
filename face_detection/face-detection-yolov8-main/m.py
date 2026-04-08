@@ -1,77 +1,66 @@
-from ultralytics import YOLO
-import cv2
-import math
-import numpy as np
-import motpy as mp
+from __future__ import annotations
 
-def drawBox(frame, bbox, tracker_id, i = 0):
-    r = (0, 0, 255)
-    if i == 1:
-        r = (0, 255, 0)
-    cv2.rectangle(frame, bbox[:2], bbox[2:], (0,255,0), 2) # draw boxes on img
-    cv2.putText(frame, f"Tracker ID: {tracker_id}", (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.75, r, 2)
+import argparse
+from pathlib import Path
 
-def calculate_distance(x1, y1, x2, y2):
-    return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
-def load_model(m):
-    model = YOLO(m)
-    return model
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_VIDEO = PROJECT_ROOT / "video" / "v8.mp4"
+DEFAULT_WEIGHTS = Path(__file__).resolve().with_name("yolov8n-face.pt")
 
 
-# Initialize YOLOv8 model
-model = load_model("/home/mahmoud/Desktop/face detection/face_detection/face-detection-yolov8-main/yolov8n-face.pt")
-
-# Open a video capture
-cap = cv2.VideoCapture("/home/mahmoud/Desktop/face detection/face_detection/video/v8.mp4")
-
-# Create a motpy Tracker
-motpy_tracker = mp.Track(1, [1,2,3,4])
-
-while True:
-    timer = cv2.getTickCount()
-    # Read a frame from the video
-    ret, frame = cap.read()
-
-    if not ret:
-        break
-    # Perform object detection using YOLOv8
-    results = model(frame)
-
-    # Draw bounding boxes and labels on the frame
-    for result in results:
-        boxes = result.boxes.cpu().numpy() # get boxes on cpu in numpy
-            # Update the motpy tracker with detected boxes
-        motpy_tracker.update(boxes)
-
-    # Perform object detection or obtain bounding boxes as needed
-    # For simplicity, let's assume you have a list of detected bounding boxes called 'detected_boxes'
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Legacy YOLOv8 face detection video demo.")
+    parser.add_argument("--video", default=str(DEFAULT_VIDEO), help="Path to the input video.")
+    parser.add_argument("--weights", default=str(DEFAULT_WEIGHTS), help="Path to the YOLO weights file.")
+    parser.add_argument("--window-name", default="YOLOv8 Face Detection", help="OpenCV window title.")
+    return parser
 
 
+def main() -> None:
+    args = build_parser().parse_args()
 
-    # Get the updated tracks from the tracker
-    tracks = motpy_tracker.active_tracks()
+    try:
+        global cv2
+        import cv2
+        from ultralytics import YOLO
+    except ImportError as exc:
+        raise SystemExit("ultralytics is required for this experiment. Install it from requirements-experiments.txt.") from exc
 
-    # Draw bounding boxes and labels on the frame
-    for track in tracks:
-        bbox = track.box
-        tracker_id = track.id
+    video_path = Path(args.video).expanduser()
+    weights_path = Path(args.weights).expanduser()
 
-        # Draw bounding box and tracker ID on the frame
-        cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0, 255, 0), 2)
-        cv2.putText(frame, f"Tracker ID: {tracker_id}", (int(bbox[0]), int(bbox[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
+    if not video_path.exists():
+        raise SystemExit(f"Video not found: {video_path}")
+    if not weights_path.exists():
+        raise SystemExit(f"Weights not found: {weights_path}")
 
-    fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer)
+    model = YOLO(str(weights_path))
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        raise SystemExit(f"Could not open video: {video_path}")
 
-    cv2.putText(frame, f"FPS: {int(fps)}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 2)
+    try:
+        while True:
+            timer = cv2.getTickCount()
+            ok, frame = capture.read()
+            if not ok:
+                break
 
-    # Display the frame with detected and tracked objects using OpenCV
-    cv2.imshow("Object Tracking", cv2.resize(frame, (1000, 650), interpolation=cv2.INTER_AREA))
+            for result in model(frame):
+                for box in result.boxes.cpu().numpy():
+                    x1, y1, x2, y2 = box.xyxy[0].astype(int)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-    # Press 'q' to exit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+            fps = cv2.getTickFrequency() / max(cv2.getTickCount() - timer, 1)
+            cv2.putText(frame, f"FPS: {int(fps)}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cv2.imshow(args.window_name, cv2.resize(frame, (1000, 650), interpolation=cv2.INTER_AREA))
 
-# Release the video capture and close any open windows
-cap.release()
-cv2.destroyAllWindows()
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+    finally:
+        capture.release()
+        cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()

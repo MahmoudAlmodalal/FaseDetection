@@ -7,22 +7,32 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_VIDEO = PROJECT_ROOT / "video" / "v5.mp4"
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Legacy dlib correlation tracker demo.")
+def build_parser(description: str) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--video", default=str(DEFAULT_VIDEO), help="Path to the input video.")
     parser.add_argument("--window-name", default="Object Tracking", help="OpenCV window title.")
     return parser
 
 
-def main() -> None:
-    args = build_parser().parse_args()
+def _tracker_creator(name: str):
+    import cv2
 
-    try:
-        global cv2
-        import cv2
-        import dlib
-    except ImportError as exc:
-        raise SystemExit("dlib is required for this demo. Install it from requirements-experiments.txt.") from exc
+    creator_name = f"Tracker{name}_create"
+
+    if hasattr(cv2, creator_name):
+        return getattr(cv2, creator_name)
+
+    legacy = getattr(cv2, "legacy", None)
+    if legacy is not None and hasattr(legacy, creator_name):
+        return getattr(legacy, creator_name)
+
+    raise RuntimeError(f"OpenCV tracker '{name}' is not available in this environment.")
+
+
+def run_tracker_demo(tracker_name: str, description: str) -> None:
+    parser = build_parser(description)
+    args = parser.parse_args()
+    import cv2
 
     video_path = Path(args.video).expanduser()
     capture = cv2.VideoCapture(str(video_path))
@@ -40,8 +50,8 @@ def main() -> None:
         cv2.destroyAllWindows()
         raise SystemExit("ROI selection was cancelled.")
 
-    tracker = dlib.correlation_tracker()
-    tracker.start_track(frame, dlib.rectangle(bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]))
+    tracker = _tracker_creator(tracker_name)()
+    tracker.init(frame, bbox)
 
     try:
         while True:
@@ -50,13 +60,10 @@ def main() -> None:
             if not ok:
                 break
 
-            tracker.update(frame)
-            tracked_bbox = tracker.get_position()
-            left = int(tracked_bbox.left())
-            top = int(tracked_bbox.top())
-            right = int(tracked_bbox.right())
-            bottom = int(tracked_bbox.bottom())
-            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+            tracked, updated_bbox = tracker.update(frame)
+            if tracked:
+                x, y, w, h = [int(value) for value in updated_bbox]
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
             fps = cv2.getTickFrequency() / max(cv2.getTickCount() - timer, 1)
             cv2.putText(frame, f"FPS: {int(fps)}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -67,7 +74,3 @@ def main() -> None:
     finally:
         capture.release()
         cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()

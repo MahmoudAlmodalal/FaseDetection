@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 
-from .application import FaceDetectionApplication
-
 VIDEO_PROFILES = {
     "default": 60.0,
     "tight": 20.0,
@@ -40,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_video(args: argparse.Namespace) -> None:
+    from .application import FaceDetectionApplication
+
     distance = args.distance if args.distance is not None else VIDEO_PROFILES[args.profile]
     app = FaceDetectionApplication(
         video_path=args.video,
@@ -51,6 +51,8 @@ def run_video(args: argparse.Namespace) -> None:
 
 
 def run_images(args: argparse.Namespace) -> None:
+    from .application import FaceDetectionApplication
+
     app = FaceDetectionApplication(image_dir=args.images, window_name=args.window_name)
     app.run_images()
 
