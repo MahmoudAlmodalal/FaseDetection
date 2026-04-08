@@ -1,0 +1,55 @@
+import cv2
+import numpy as np
+import motpy as mot
+
+# Create a MultiObjectTracker instance
+tracker = mot.MultiObjectTracker(dt=1/30.0)  # Set the time step (dt) according to your video frame rate
+
+# Initialize the video capture
+cap = cv2.VideoCapture('/home/mahmoud/Desktop/face detection/face_detection/video/v5.mp4')  # Replace with the path to your video file
+
+# Read the first frame to initialize ROI selection
+ret, frame = cap.read()
+if not ret:
+    print("Error: Could not read the video frame.")
+    exit(1)
+
+# Select ROI interactively
+bbox = cv2.selectROI(frame, False)
+roi = (bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3])
+
+# Initialize a track with the selected ROI
+detections = [{'bbox': roi, 'id': 1}]
+tracker.step(detections)
+
+while True:
+    ret, frame = cap.read()
+
+    if not ret:
+        break
+
+    # Detect objects in the current frame and obtain their bounding boxes
+    # Example: detections = [{'bbox': [x, y, width, height], 'id': 1}, ...]
+
+    # Update the tracker with new detections
+    tracker.step(detections)
+
+    # Retrieve active tracks and draw them on the frame
+    active_tracks = tracker.active_tracks()
+    for track in active_tracks:
+        x, y, w, h = track.box
+        track_id = track.id
+        cv2.rectangle(frame, (int(x), int(y)), (int(x + w), int(y + h)), (0, 255, 0), 2)
+        cv2.putText(frame, f"ID: {track_id}", (int(x), int(y) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    # Display the frame with tracking results
+    cv2.imshow('Object Tracking', frame)
+
+    key = cv2.waitKey(1)
+
+    # Press 'q' to exit
+    if key & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
